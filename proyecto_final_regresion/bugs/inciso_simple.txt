@@ -1,0 +1,22 @@
+model
+{
+#Likelihood
+for (i in 1:n) {
+       y[i] ~ dnorm(eta[i],tau)
+       #Liga Lineal
+       eta[i]<-alpha+beta*x[i]+alpha_cdmx*x_cdmx[i]+alpha_edomx*x_edomx[i]+beta_cdmx*x[i]*x_cdmx[i]+beta_edomx*x[i]*x_edomx[i]}
+       #eta[i]<-alpha_cdmx*x_cdmx[i]+alpha_edomx*x_edomx[i]+beta_cdmx*x[i]*x_cdmx[i]+beta_edomx*x[i]*x_edomx[i]}
+#Priors
+alpha ~ dnorm(0,0.001)
+alpha_cdmx ~ dnorm(0,0.001)
+alpha_edomx ~ dnorm(0,0.001)
+
+beta ~ dnorm(0,0.001)
+beta_cdmx ~ dnorm(0,0.001)
+beta_edomx ~ dnorm(0,0.001)
+
+tau ~ dgamma(0.001,0.001)
+
+#Prediction
+for (i in 1:n) { yf[i] ~ dnorm(eta[i],tau) }
+}

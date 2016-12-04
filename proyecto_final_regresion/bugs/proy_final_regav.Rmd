@@ -1,0 +1,452 @@
+---
+title: "Proyecto Final Regresión Avanzada"
+author: "Carlos Pérez, Juan Zinser"
+date: "Diciembre 2016"
+output: pdf_document
+---
+  
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
+#--- Paquetería ---
+library(knitr)
+library(ggplot2)
+library(dplyr)
+library(R2OpenBUGS)
+library(R2jags)
+library(coda)
+library(stargazer)
+#library(readr)
+#library(tidyr)
+source('../utils.R')
+
+#--- My functions ---
+prob <- function(x){
+  out <- min(length(x[x>0])/length(x),length(x[x<0])/length(x))
+  out
+}
+
+set.seed(115576)
+```
+
+
+\tableofcontents
+
+\newpage
+
+
+i. Introducción: descripción del problema, contexto y objetivos a resolver
+ii. Descripción de la información: Describan cada una de sus variables, escalas de medición, y presenten un análisis exporatorio de datos
+iii. Modelado e implementación: describan con detalle el modelo, con todas sus expecificaciones, que usarán para resolver sus objetivos. Corran su modelo en R-OpenBugs-JAGS y de detalles de sus cadenas, convergencia, etc. 
+iv. Interpretación de resultados: presenten un resumen de sus estimadores e interpreten en el contexto del problema. Hagan uso de sus resultados para responder a los objetivos planteados y sugieran o tomen decisiones con respecto a esos resultados. 
+v. Referencias: Incluyan una lista de las fuentes que consultaron para hacer su trabajo, desde páginas de internet, libros, revistas o apuntes de clase. 
+vi. Apéndice. Incluyan si quieren, todo el código utilizado. Por favor no incluyen código dentro de niguna de las secciones anteriores. 
+NOTA: Las gráfica que consideren útiles las pueden incluir en cualquiera de las secciones de la i-iv con comentarios para que el lector vea lo que ustedes queiren que vean. Las gráficas que no sean indispensables las pueden mandar al apéndice. 
+
+
+\section{Introducción: Calidad del Aire en la Ciudad de México}
+
+Dado que la calidad del aire es un tema primordial en la salud de los habitantes y cada vez más un tema central en la política ambiental en las megalópolis del planeta, es relevante analizar el efecto que tiene la acumulacion vehicular sobre los componentes atmosféricos que ponen en riesgo la salud de los habitantes.
+
+En el presente año existieron varios periodos que se declararon como contingencia ambiental en la ciudad de mexico debido al exceso en la concentracion de ciertos contaminantes en la atmosfera, de modo que es cada vez más necesario realizar monitoreos y estudios del impacto que tiene la cantidad de unidades vehiculares que circulan en las ciudades con problemas ambientales. En particular aunado al crecimiento urbano, el Valle de México no presenta una orografía favorable para la contaminación ambiental, ya que esta es propensa a que se produzca el efecto invernadero dentro de la cuenca del valle.  
+ 
+Por lo tanto, en el presente análisis se desea estimar la relación entre el parque vehicular, esto es el número registrado de autos, motocicletas, autobuses de pasajeros y camiones de carga en circulación, y la concentración de partículas suspendidas de menos de 2.5 micrómetros en los municipios de la Ciudad de México para el periodo 2004-2015.
+
+
+\section{Descripción de la Información}
+
+Las variables explicativas o regresores son parte del conjunto de datos *Vehículos de motor registrados en circulación* que forma parte de los registros administrativos en las fuentes estadísticas de INEGI. El nivel de desagregación más granular de los datos es anual y a nivel municipio.  
+La información es pública y puede ser descargada en el siguiente enlace [http://www.inegi.org.mx/est/contenidos/proyectos/registros/economicas/vehiculos/default.aspx], esta información surge a partir de los padres vehiculares de cada municipio y es consolidada por INEGI a través de los gobiernos estatales.
+
+Este conjunto comprende categorías oficial, particular y público para cada tipo de vehículo, no obstante fueron agregadas para poseer datos con pocos valores nulos. Las variables resultantes **auto**, **cyc**, **moto**, **cam_pas** representan el total de autos, motocicletas, camiones de carga y camiones de pasajeros respectivamente.
+
+Las variables representan el conteo total de vehículos, por lo que poseen una escala de medición *racional*. A continuación una breve descripción de cada una: 
+
+- **auto** : Comprende los vehículos a motor destinados principalmente al transporte de personas, que tengan hasta 7 asientos (incluyendo el del chofer).
+
+- **cam_pas** : Comprende los autobuses urbanos y suburbanos, microbuses, camiones escolares, camionetas pick-up (utilizadas para el transporte de trabajadores), ómnibus y en general, los vehículos con más de 7 asientos, destinados al transporte público o privado de personas. 
+
+- **cyc** : Son los que están destinados exclusivamente al transporte de carga. También se incluyen los vehículos de tracción diseñados para el remolque como tráilers, auto-tanque, panel, cabinas, pipas, redilas, 
+vanette, volteo y grúas. Es el transporte de pasajeros y/o carga que es utilizado por organismos gubernamentales para satisfacer sus propios requerimientos y/o atender necesidades de la población.
+
+- **moto** : Vehículo automotor de dos o tres ruedas, cuyo peso no excede los cuatrocientos kilogramos, incluye triciclos, motonetas y motocicletas. Es el transporte de pasajeros y/o carga que es utilizado por organismos gubernamentales para satisfacer sus propios requerimientos y/o atender necesidades de la población.
+
+
+
+La variable dependiente es la concentración de partículas suspendidas de menos de 2.5 micrométros medida a través de la red manual de monitoreo atmosférico, la cual puede ser descargada del sitio de la calidad del aire de la Ciudad de México [http://148.243.232.112:8080/opendata/red_manual/red_manual_particulas_susp.csv]
+
+Las artículas suspendidas **pm2.5** son medidas a partir de dos métodos principalmente: gravimetría, que conta en determinación de la masa de partículas presente en un flujo de aire, las partículas son separadas de la corriente y depositadas sobre un filtro colocado en un elemento oscilante cuya variación en la frecuencia de oscilación es proporcional a la masa; por otro lado,
+radiación beta, que consiste en la atenuación en la intensidad de la radiación beta por las partículas depositadas sobre un filtro continuo, en la que se calcula la masa a partir de la emisión de electrones.
+
+Los datos poseen una desagregación a nivel estación de monitoreo, es decir con coordenadas latitud y longitud, las cuales están georreferenciadas a los municipios correspondientes. La dimensionalidad temporal que tienen es a nivel diario y dichas las cifras corresponden al promedio diario de partículas suspendidas por lo que poseen una escala de medición *racional* . Estas cantidades fueron agregadas para obtener un cálculo aproximado del total de partículas suspendidas al año y poder cruzar la información con el total del parque vehicular. Algunos hechos importantes sobre las fuentes que originan las partículas suspendidas [Google]( http://www.aire.cdmx.gob.mx/ "Google") :
+
+- Ciertos tipo de camiones y los tractocamiones son los vehículos de mayor emisión de partículas finas debido al uso de diésel como combustible. Generan el 8% de las PM10 y el 11% de las PM2.5.
+espacio
+
+- El tránsito vehicular sobre las vialidades genera emisiones de partículas, producidas por el paso de los vehículos sobre ellas y la resuspensión del polvo. Contribuyen con el 30% de las PM10 y el 13% de las PM2.5.
+
+- Las actividades de la construcción (demolición, edificación y construcción de vialidades ) aporta el 16% de las PM10 y el 25% de PM2.5
+espacio
+
+- La industria química y la fabricación de productos a base de minerales no metálicos (ej. cemento, concretos, cal) son los mayores emisores de partículas del sector industrial aportando el 7% de PM10 y 10% de PM2.5
+
+No obstante el objetivo principal era realizar un análisis completo de la ciudad, la red de monitoreo presenta dos grandes problemas: no todas las estaciones activas recopilan información de todos los contaminantes de modo que hay una cobertura geográfica limitada; por otro lado, de estas estaciones que sí realizan mediciones sobre el tipo de contaminante en cuestión no todas están operando durante el periodo completo de modo que también existe una insuficencia en términos de la cobertura temporal. 
+
+Dado lo anterior la muestra se redujo considerablemente a 5 municipios en los cuales se encuentra información detallada de forma completa.
+
+La variable *id_entmun* representa la clave geoestadistica de los municipios establecida por INEGI. Por otro lado se tiene la variable *year* que representa el ano en que se efectuaron las mediciones. 
+
+\subsection{Análisis Exploratorio}
+
+
+En seguida se muestra la Tabla 1 con un resumen estadístico, en el que se pueden apreciar el número de observaciones y las algunos estadísticos que permiten conocer las distribuciones, el total de observaciones en el conjunto de datos es ...
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis'}
+#Load Data
+data_reg <- read.csv("../regresion_airecdmx") %>% filter(year != '2003-01-01') %>% mutate(id_entmun=factor(id_entmun),
+                                                                                          year_num=as.numeric(substr(year,1,4)))%>% rename(cam=cam_pas)
+
+data_t <- data_reg %>% mutate(id_est=substring(stringr::str_pad(id_entmun,5,'left','0'), 1,2)) %>% group_by(year,id_est) %>% summarise(pm2.5=sum(pm2.5), cam=sum(cam), cyc=sum(cyc), auto=sum(auto), moto=sum(moto)) %>% ungroup
+
+#names(data)<-tolower(gsub('\\.','_',names(data)))
+#stargazer(data_reg, dep.var.caption = NULL)
+
+#print(kable(data_reg %>% select(-id_entmun,-year) %>% summary, caption = 'Title of the table'),format='latex')
+kable(data_reg %>% select(-id_entmun,-year) %>% summary, caption = 'Resumen Estadistico', format='pandoc')
+```
+
+La figura 2 presenta las relaciones existentes entre las variables consideradas en el conjunto de datos. Es importante apreciar que existe una relación positiva, como era de esperarse, entre el conteo total de vehiculos en sus distintas categorías y el total de partículas suspendidas.
+
+En particular existe en este grafico la distribuciones a lo largo del tiempo si se considera la columna de graficos bajo la etiqueta *year*, en las que se puede observar un comportamiento creciente. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis', fig.cap='Matriz de Diagramas de Dispersion'}
+#Scatter Plot (MILLONES DE PESOS)
+# ggpairs(data_reg %>% select(-year), 
+#   lower=list(continuous = wrap(ggally_cor, size = 0.1)),
+#     upper=list(continuous = wrap(ggally_points, size = 1, color = "blue"))
+# )
+# 
+# ggpairs(data_reg %>% select(-year) %>% mutate(auto=log(auto),moto=log(moto+1),cyc=log(cyc),cam=log(cam),pm2.5=log(pm2.5)), 
+#   lower=list(continuous = wrap(ggally_cor, size = 0.1)),
+#     upper=list(continuous = wrap(ggally_points, size = 1, color = "blue"))
+# )
+
+# 
+
+ 
+## Observaciones 
+# quitar moto = 0 
+# quitar outliers (zona fea) --> investigarlos
+#
+data_t <- data_t %>% mutate(id_cdmx=ifelse(id_est=='09',1,0),id_edmx=ifelse(id_est=='15',1,0)) #%>% select(-id_est)
+
+ggpairs(data_t %>% mutate(year=as.numeric(substr(year,1,4))),lower=list(continuous = wrap(ggally_cor, size = 0.1)),
+     upper=list(continuous = wrap(ggally_points, size = 1, color = data_t$id_est) ))
+ 
+```
+
+A continuación se presenta una gráfica exploratoria de la dependiente elegida contra la variable que tiene mayor correlación lineal, en particular en el diagrama de dispersión,  se observa una relación positiva entre ambas variables. Asimismo se exhibe el valor de la correlación lineal que existe entre ambas. En particular es importante mencionar que existe una acumulación natural en la zona de conteos vehiculares bajos y altas cantidades de concentración de partículas suspendidas de menos de 2.5 micrométros, por lo que se uso una transfomación logarítmica sobre los conteos.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis'}
+#Scatter Plot (MILLONES DE PESOS)
+# plot(log(data_reg$cyc),log(data_reg$pm2.5), 
+#      main=paste('Coeficiente de Correlacion,\n rho = ', 
+#        cor(log(data_reg$cyc),log(data_reg$pm2.5)),sep=''))
+
+#data_reg %>% head
+#
+#ggplot(data_reg,aes(x=log(cyc),y=pm2.5))+ geom_point() + facet_grid(.~id_entmun, scale='free') 
+# 
+# plot(data_reg$auto,data_reg$pm2.5, 
+#      main=paste('Variables originales,\n rho = ', 
+#                 cor(data_reg$auto,data_reg$pm2.5),sep=''))
+
+plot(log(data_t$cyc),log(data_t$pm2.5), 
+     main=paste('Coeficiente de Correlacion,\n rho = ', 
+       cor(log(data_t$cyc),log(data_t$pm2.5)),sep=''))
+
+plot(data_t$auto,data_t$pm2.5, 
+     main=paste('Coeficiente de Correlacion,\n rho = ', 
+       cor(data_t$auto,data_t$pm2.5),sep=''))
+
+
+```
+
+
+\section{Modelado e Implementacion}
+
+En este analisis se realizaron distintos ajustes que permitieron un mejor ajuste de los datos, considerando cada vez mejores especificaciones que se ven reflejadas en las metricas de desemepeno correspondientes. 
+
+\subsection{Regresión Simple: Modelo Normal}
+
+Se desea ajustar un modelo de regresión lineal normal de la forma 
+
+\[
+  y_i = \log(pm2.5_i) = \alpha + \beta \log(cyc_i) + \epsilon_i 
+  \]
+
+en la cual $\epsilon_i \sim N(0,\tau)$, de modo que $y_i \sim N(\mu_i, \tau)$, donde $\mu_i = \alpha + \beta \log(cyc_i)$.Por otro lado en esta primera especificación se usan distribuciones iniciales 
+
+\begin{itemize}
+\item $\alpha \sim N(0,0.001)$
+\item $\beta \sim N(0,0.001)$
+\item $\tau \sim Ga(0.001,0.001)$
+\end{itemize}
+
+La razon principal para elegir dichas distribuciones ya que representan ser los estándares de distribuciones iniciales no informativas. 
+  
+  Se transforman los datos a través de la transformación del logarítmica debido a la escala y concentración de los datos, así como para mejorar la varianza de los mismos. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis', fig.cap='Diagnostico para Beta'}
+#### MODELO NORMAL 
+n = nrow(data_t)
+
+#-Se definen los datos
+data <- list("n"=n,"y"=log(data_t$pm2.5), "x"=log(data_t$auto), "x_cdmx"=data_t$id_cdmx, "x_edomx"=data_t$id_edmx)
+
+#-Se definen valores iniciales
+#-Selccionando los parámetros a monitorear
+inits <- function(){list(tau=1, alpha=0, beta=0, beta_cdmx=0, beta_edomx=0, alpha_cdmx=0, alpha_edomx=0, yf=rep(1,n))}
+parameters <- c('yf','alpha','alpha_cdmx','alpha_edomx','beta','beta_cdmx','beta_edomx','tau')
+
+#inits <- function(){list(tau=1, beta_cdmx=0, beta_edomx=0, alpha_cdmx=0, alpha_edomx=0, yf=rep(1,n))}
+#parameters <- c('yf','alpha_cdmx','alpha_edomx','beta_cdmx','beta_edomx','tau')
+
+#-OPENBUGS-
+#-Corriendo el modelo-
+ej1.sim <- bugs(data, inits, parameters, model.file='inciso_simple.txt', n.iter=5000,n.chains=1,n.burnin=500)
+
+#OpenBUGS
+out<-ej1.sim$sims.list
+
+# beta<-out$beta
+# par(mfrow=c(2,2))
+# plot(beta,type="l")
+# title('MCMC Trace')
+# beta_cum<-cumsum(beta)/(1:length(beta))
+# plot(beta_cum,type="l")
+# title('Ergodic ') #Convergence
+# hist(beta,freq=FALSE)
+# acf(beta)
+
+
+# beta<-out$beta
+# par(mfrow=c(2,2))
+# plot(beta,type="l")
+# title('MCMC Trace')
+# beta_cum<-cumsum(beta)/(1:length(beta))
+# plot(beta_cum,type="l")
+# title('Ergodic ') #Convergence
+# hist(beta,freq=FALSE)
+# acf(beta)
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis'}
+
+alpha<-out$alpha
+par(mfrow=c(2,2))
+plot(alpha,type="l")
+title('MCMC Trace')
+alpha_cum<-cumsum(alpha)/(1:length(alpha))
+plot(alpha_cum,type="l")
+title('Ergodic')
+hist(alpha,freq=FALSE)
+acf(alpha)
+#title("Diagnostico alpha", outer = TRUE)
+
+```
+
+La convergencia ...
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis'}
+
+#Resumen (estimadores)
+#OpenBUGS
+out.sum<-ej1.sim$summary
+
+#print(out.sum)
+df_aux<-as.data.frame(out.sum)[c("alpha","beta","tau","beta_edomx","beta_cdmx","alpha_cdmx","alpha_edomx"),
+                               c("mean","2.5%", "97.5%","sd")]
+
+kable(df_aux, caption = 'Resumen Parámetros', format='pandoc')
+
+```
+
+Se puede observar que las estimaciones puntuales y de intervalos para $\alpha$, $\beta$ y la devianza en la tabla anterior.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis', fig.caption='Ajuste'}
+#Prediccion
+
+#DIC
+#OpenBUGS
+out.dic<-ej1.sim$DIC
+
+# Prediccion
+out.yf<-out.sum[grep("yf",rownames(out.sum)),]
+out.alpha<-out.sum[grep("alpha",rownames(out.sum)),]
+
+or<-order(log(data_t$auto))
+#ymin<-min(data_t$cyc,out.yf[,c(1,3,7)])
+#ymax<-max(data_t$cyc,out.yf[,c(1,3,7)])
+par(mfrow=c(1,1))
+plot(log(data_t$auto),log(data_t$pm2.5))
+lines(log(data_t$auto[or]),out.yf[or,1],lwd=1,col=2)
+title(paste('Ajuste con DIC ', out.dic, sep=""))
+#pseudo_b <- var(out.yf[,1])/(var(out.yf[,1])+var(out.yf[,1]-data$pm2.5))
+
+#print(paste('Pseudo-R2 ', pseudo_b,sep=''))
+#dic_b<-out.dic
+```
+
+Las predicciones con un modelo de regresion simple, no ajusta de forma perfecta a los datos.
+
+
+\subsection{Regresión Mltiple: Modelo Normal}
+
+Se desea ajustar un modelo de regresión lineal normal de la forma 
+
+\[
+  \log(pm2.5_i) = \alpha + \beta_{cyc} \log(cyc_i) + \beta_{cam} \log(cam_i)+ \beta_{auto} \log(auto_i)+ \beta_{moto} \log(moto_i) + \beta + \epsilon_i 
+  \]
+
+en la cual $\epsilon_i \sim N(0,\tau)$, de modo que $y_i \sim N(\mu_i, \tau)$, donde $\mu_i = \alpha + \beta \log(cyc_i)$.Por otro lado en esta primera especificación se usan distribuciones iniciales 
+
+\begin{itemize}
+\item $\alpha \sim N(0,0.001)$
+\item $\beta_i \sim N(0,0.001) \text{ para } i \in \{ \text{cyc, cam, auto, moto} \}$
+\item $\tau \sim Ga(0.001,0.001)$
+\end{itemize}
+
+  Se transforman los datos a través de la transformación del logarítmica debido a la escala y concentración de los datos, así como para mejorar la varianza de los mismos. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis', fig.cap='Diagnostico para Beta'}
+#### MODELO NORMAL
+n = nrow(data_t)
+
+#-Se definen los datos
+data <- list("n"=n,"y"=log(data_t$pm2.5), 
+              'x_cdmx'=data_t$id_cdmx,
+              'x_cyc'=log(data_t$cyc),
+              'x_auto'=log(data_t$auto),
+              'x_moto'=log(data_t$moto+1),
+              'x_cam'=log(data_t$cam),
+              'x_edomx'=data_t$id_edmx)
+
+#-Se definen valores iniciales
+inits <- function(){list(tau=1, yf=rep(1,n),
+                          alpha=0,
+                          alpha_cdmx=0,
+                          alpha_edomx=0,
+                          beta_cyc=0,
+                          beta_auto=0,
+                          beta_cam=0,
+                          beta_moto=0,
+                          beta_cyc_cdmx=0,
+                          beta_auto_cdmx=0,
+                          beta_cam_cdmx=0,
+                          beta_moto_cdmx=0,
+                          beta_cyc_edomx=0,
+                          beta_auto_edomx=0,
+                          beta_cam_edomx=0,
+                          beta_moto_edomx=0)}
+
+#-Selccionando los parámetros a monitorear-
+parameters <- c('tau','yf',
+                'alpha',
+                'alpha_cdmx',
+                'alpha_edomx',
+                'beta_cyc',
+                'beta_auto',
+                'beta_cam',
+                'beta_moto',
+                'beta_cyc_cdmx',
+                'beta_auto_cdmx',
+                'beta_cam_cdmx',
+                'beta_moto_cdmx',
+                'beta_cyc_edomx',
+                'beta_auto_edomx',
+                'beta_cam_edomx',
+                'beta_moto_edomx')
+
+#-OPENBUGS-
+#-Corriendo el modelo-
+ej1.sim <- bugs(data, inits, parameters, model.file='inciso_multiple.txt', 
+                n.iter=5000,n.chains=1,n.burnin=500)
+
+#OpenBUGS
+out<-ej1.sim$sims.list
+
+# beta_cyc<-out$beta_cyc
+# par(mfrow=c(2,2))
+# plot(beta_cyc,type="l")
+# title('MCMC Trace')
+# beta_cyc_cum<-cumsum(beta_cyc)/(1:length(beta_cyc))
+# plot(beta_cyc_cum,type="l")
+# title('Ergodic ') #Convergence
+# hist(beta_cyc,freq=FALSE)
+# acf(beta_cyc)
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis'}
+
+alpha<-out$alpha
+par(mfrow=c(2,2))
+plot(alpha,type="l")
+title('MCMC Trace')
+alpha_cum<-cumsum(alpha)/(1:length(alpha))
+plot(alpha_cum,type="l")
+title('Ergodic')
+hist(alpha,freq=FALSE)
+acf(alpha)
+#title("Diagnostico alpha", outer = TRUE)
+
+```
+
+La convergencia ...
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis'}
+
+#Resumen (estimadores)
+#OpenBUGS
+out.sum<-ej1.sim$summary
+
+#print(out.sum)
+df_aux<-as.data.frame(out.sum)[c("alpha","beta_cyc","beta_cam","beta_auto","beta_moto",
+                                 "alpha_edomx","alpha_cdmx","tau"),
+                               c("mean","2.5%", "97.5%","sd")]
+
+kable(df_aux, caption = 'Resumen Parámetros', format='pandoc')
+
+```
+
+Se puede observar que las estimaciones puntuales y de intervalos para $\alpha$, $\beta$ y la devianza en la tabla anterior.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, results='asis', fig.caption='Ajuste'}
+#Prediccion
+
+#DIC
+#OpenBUGS
+out.dic<-ej1.sim$DIC
+
+# Prediccion
+out.yf<-out.sum[grep("yf",rownames(out.sum)),]
+out.alpha<-out.sum[grep("alpha",rownames(out.sum)),]
+
+or<-order(log(data_t$cyc))
+#ymin<-min(data_reg$cyc,out.yf[,c(1,3,7)])
+#ymax<-max(data_reg$cyc,out.yf[,c(1,3,7)])
+par(mfrow=c(1,1))
+plot(log(data_t$cyc),log(data_t$pm2.5))
+lines(log(data_t$cyc[or]),out.yf[or,1],lwd=1,col=2)
+title(paste('Ajuste con DIC ', out.dic, sep=""))
+#pseudo_b <- var(out.yf[,1])/(var(out.yf[,1])+var(out.yf[,1]-data$pm2.5))
+
+#print(paste('Pseudo-R2 ', pseudo_b,sep=''))
+#dic_b<-out.dic
+```
+
+
+
+
+
