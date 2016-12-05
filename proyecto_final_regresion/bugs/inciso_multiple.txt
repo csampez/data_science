@@ -2,18 +2,19 @@ model
 {
 #Likelihood
 for (i in 1:n) {
-    y[i] ~ dnorm(eta[i],tau)
-    eta[i]<- alpha+alpha_cdmx*x_cdmx[i]+alpha_edomx*x_edomx[i]+
-		beta_cyc*x_cyc[i]+beta_cyc_cdmx*x_cyc[i]*x_cdmx[i]+beta_cyc_edomx*x_cyc[i]*x_edomx[i]+
-		beta_auto*x_auto[i]+beta_auto_cdmx*x_auto[i]*x_cdmx[i]+beta_auto_edomx*x_auto[i]*x_edomx[i]+
-		beta_moto*x_moto[i]+beta_moto_cdmx*x_moto[i]*x_cdmx[i]+beta_moto_edomx*x_moto[i]*x_edomx[i]+
-		beta_cam*x_cam[i]+beta_cam_cdmx*x_cam[i]*x_cdmx[i]+beta_cam_edomx*x_cam[i]*x_edomx[i]
+    #y[i] ~ dnorm(eta[i],tau)
+    y[i] ~ dgamma(tau,eta[i])
+    a[i] <- tau/exp(eta[i])
+    eta[i] <- alpha+alpha_cdmx*x_cdmx[i]+
+		beta_cyc*x_cyc[i]+beta_cyc_cdmx*x_cyc[i]*x_cdmx[i]+
+		beta_auto*x_auto[i]+beta_auto_cdmx*x_auto[i]*x_cdmx[i]+
+		beta_moto*x_moto[i]+beta_moto_cdmx*x_moto[i]*x_cdmx[i]+
+		beta_cam*x_cam[i]+beta_cam_cdmx*x_cam[i]*x_cdmx[i]
 }
 
 #Priors
 alpha ~ dnorm(0,0.01)
 alpha_cdmx ~ dnorm(0,0.01)
-alpha_edomx ~ dnorm(0,0.01)
 
 beta_cyc ~ dnorm(0,0.0001)
 beta_auto ~ dnorm(0,0.0001)
@@ -25,15 +26,13 @@ beta_auto_cdmx ~ dnorm(0,0.01)
 beta_cam_cdmx ~ dnorm(0,0.0001)
 beta_moto_cdmx ~ dnorm(0,0.0001)
 
-beta_cyc_edomx ~ dnorm(0,0.01)
-beta_auto_edomx ~ dnorm(0,0.01)
-beta_cam_edomx ~ dnorm(0,0.0001)
-beta_moto_edomx ~ dnorm(0,0.0001)
-
 tau ~ dgamma(0.0001,0.0001)
 #tau ~ dgamma(0.1,0.1)
 
 #Prediction
-for (i in 1:n) { yf[i] ~ dnorm(eta[i],tau) }
+for (i in 1:n) { 
+  yf[i] ~ dgamma(a[i],tau)
+  #yf[i] ~ dnorm(eta[i],tau)
+  }
 }
 
