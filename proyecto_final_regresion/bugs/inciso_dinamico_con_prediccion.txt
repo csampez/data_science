@@ -2,9 +2,11 @@ model
 {
 #Likelihood
 for (i in 1:n) {
-       #Liga Lineal
-      y[i] ~ dnorm(eta[i],tau)
-      eta[i]<- alpha[i]+alpha_cdmx[i]*x_cdmx[i]+
+      #Liga Lineal
+      #y[i] ~ dnorm(eta[i],tau)
+      y[i] ~ dgamma(tau*exp(eta[i]),tau)
+        
+      eta[i]<- alpha+alpha_cdmx*x_cdmx[i]+
   		beta_cyc[i]*x_cyc[i]+beta_cyc_cdmx[i]*x_cyc[i]*x_cdmx[i]+
   		beta_auto[i]*x_auto[i]+beta_auto_cdmx[i]*x_auto[i]*x_cdmx[i]+
   		beta_moto[i]*x_moto[i]+beta_moto_cdmx[i]*x_moto[i]*x_cdmx[i]+
@@ -12,10 +14,11 @@ for (i in 1:n) {
        
 # state equation
 for(i in 2:n){
+
   # alphas 
-  alpha[i] ~ dnorm(alpha[i-1],tau.a)
-  alpha_cdmx[i] ~ dnorm(alpha_cdmx[i-1],tau.a_cdmx)
-  
+  #alpha[i] ~ dnorm(alpha[i-1],tau.a)
+  #alpha_cdmx[i] ~ dnorm(alpha_cdmx[i-1],tau.a_cdmx)
+
   beta_cyc[i] ~ dnorm(beta_cyc[i-1],tau.bcyc)
   beta_cyc_cdmx[i] ~ dnorm(beta_cyc_cdmx[i-1],tau.bcyc_cdmx)
   
@@ -31,25 +34,25 @@ for(i in 2:n){
 }
 
 #Priors
-alpha[1] ~ dnorm(0,0.001)
-alpha_cdmx[1] ~ dnorm(0,0.001)
+alpha ~ dnorm(0,tau.a)
+alpha_cdmx ~ dnorm(0,tau.a_cdmx)
 
-beta_cyc[1] ~ dnorm(0,0.001)
-beta_cyc_cdmx[1] ~ dnorm(0,0.001)
+beta_cyc[1] ~ dnorm(0,0.0001)
+beta_cyc_cdmx[1] ~ dnorm(0,0.0001)
 
 beta_auto[1] ~ dnorm(0,0.001)
-beta_auto_cdmx[1] ~ dnorm(0,0.001)
+beta_auto_cdmx[1] ~ dnorm(0,0.0001)
 
-beta_moto[1] ~ dnorm(0,0.001)
-beta_moto_cdmx[1] ~ dnorm(0,0.001)
+beta_moto[1] ~ dnorm(0,0.0001)
+beta_moto_cdmx[1] ~ dnorm(0,0.0001)
 
 beta_cam[1] ~ dnorm(0,0.001)
-beta_cam_cdmx[1] ~ dnorm(0,0.001)
+beta_cam_cdmx[1] ~ dnorm(0,0.0001)
 
-tau ~ dgamma(0.001,0.001)
+tau ~ dgamma(0.0001,0.0001)
 
 # suavizamiento 
-lambda = 30
+lambda = 15
 tau.a = tau*lambda
 tau.a_cdmx = tau*lambda
 tau.bauto = tau*lambda
@@ -63,10 +66,10 @@ tau.bcam_cdmx = tau*lambda
 
 
 #Prediction
-for (i in 1:n) { yf[i] ~ dnorm(eta[i],tau) }
+for (i in 1:n) { yf[i] ~ dgamma(tau*exp(eta[i]),tau) }
 for (i in 1:m){ 
-      yf2[i] ~ dnorm(etaf[i],tau)
-      etaf[i]<- alphaf[i]+alpha_cdmxf[i]*xf_cdmx[i]+
+      yf2[i] ~ dgamma(tau*exp(etaf[i]),tau)
+      etaf[i]<- alphaf+alpha_cdmxf*xf_cdmx[i]+
   		beta_cycf[i]*xf_cyc[i]+beta_cyc_cdmxf[i]*xf_cyc[i]*xf_cdmx[i]+
   		beta_autof[i]*xf_auto[i]+beta_auto_cdmxf[i]*xf_auto[i]*xf_cdmx[i]+
   		beta_motof[i]*xf_moto[i]+beta_moto_cdmxf[i]*xf_moto[i]*xf_cdmx[i]+
@@ -74,8 +77,8 @@ for (i in 1:m){
 }
 for(i in 2:m){
   # alphas 
-  alphaf[i] ~ dnorm(alphaf[i-1],tau.a)
-  alpha_cdmxf[i] ~ dnorm(alpha_cdmxf[i-1],tau.a_cdmx)
+  #alphaf[i] ~ dnorm(alphaf[i-1],tau.a)
+  #alpha_cdmxf[i] ~ dnorm(alpha_cdmxf[i-1],tau.a_cdmx)
   
   beta_cycf[i] ~ dnorm(beta_cycf[i-1],tau.bcyc)
   beta_cyc_cdmxf[i] ~ dnorm(beta_cyc_cdmxf[i-1],tau.bcyc_cdmx)
@@ -90,8 +93,8 @@ for(i in 2:m){
   beta_cam_cdmxf[i] ~ dnorm(beta_cam_cdmxf[i-1],tau.bcam_cdmx)
   
 }
-  alphaf[1] ~ dnorm(alpha[n],tau.a)
-  alpha_cdmxf[1] ~ dnorm(alpha_cdmx[n],tau.a_cdmx)
+  alphaf ~ dnorm(alpha,tau.a)
+  alpha_cdmxf ~ dnorm(alpha_cdmx,tau.a_cdmx)
   
   beta_cycf[1] ~ dnorm(beta_cyc[n],tau.bcyc)
   beta_cyc_cdmxf[1] ~ dnorm(beta_cyc_cdmx[n],tau.bcyc_cdmx)
